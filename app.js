@@ -1363,11 +1363,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let scannerControls = null;
     let ocrWorker = null;
+    let ocrReading = false;
+    let ocrTimer = null;
 
     async function stopScanner() {
         if (scannerControls) {
             scannerControls.stop();
             scannerControls = null;
+        }
+        if (ocrTimer) {
+            clearInterval(ocrTimer);
+            ocrTimer = null;
         }
         document.getElementById("scannerOverlay")?.remove();
     }
@@ -1399,7 +1405,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function readInventoryText() {
         const status = document.getElementById("scannerStatus");
-        const button = document.getElementById("ocrScanBtn");
         const video = document.getElementById("scannerVideo");
         if (!window.Tesseract) {
             status.textContent = "Textläsningen kunde inte laddas.";
@@ -1409,8 +1414,9 @@ document.addEventListener("DOMContentLoaded", () => {
             status.textContent = "Kameran är inte redo ännu.";
             return;
         }
-        button.disabled = true;
-        status.textContent = "Läser inventarienummer…";
+        if (ocrReading) return;
+        ocrReading = true;
+        status.textContent = "Söker efter kod eller inventarienummer…";
         try {
             const canvas = document.createElement("canvas");
             const vw = video.videoWidth;
@@ -1450,8 +1456,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("OCR-fel:", error);
             status.textContent = "Kunde inte läsa inventarienumret. Försök igen.";
         } finally {
-            const currentButton = document.getElementById("ocrScanBtn");
-            if (currentButton) currentButton.disabled = false;
+            ocrReading = false;
         }
     }
 
@@ -1466,7 +1471,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div>
                         <span class="scanner-kicker">MT ROND</span>
                         <h2 id="scannerTitle">Skanna inventarie</h2>
-                        <p>Kod läses automatiskt. För äldre etiketter, placera numret i ramen och välj Läs inventarienummer.</p>
+                        <p>Rikta kameran mot kod eller inventarienummer. Läsningen sker automatiskt.</p>
                     </div>
                     <button type="button" class="scanner-close" id="scannerClose" aria-label="Stäng">×</button>
                 </header>
@@ -1484,9 +1489,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     <p id="scannerStatus" aria-live="polite">Startar kameran…</p>
                 </div>
                 <div class="scanner-actions">
-                    <button type="button" class="scanner-ocr-button" id="ocrScanBtn">
-                        <span aria-hidden="true">⌕</span> Läs inventarienummer
-                    </button>
                     <button type="button" class="scanner-cancel-button" id="scannerCancel">Avbryt</button>
                 </div>
             </section>`;
@@ -1495,7 +1497,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const video = document.getElementById("scannerVideo");
         document.getElementById("scannerClose").addEventListener("click", stopScanner);
         document.getElementById("scannerCancel").addEventListener("click", stopScanner);
-        document.getElementById("ocrScanBtn").addEventListener("click", readInventoryText);
         overlay.addEventListener("click", (event) => { if (event.target === overlay) stopScanner(); });
         if (!window.ZXingBrowser) {
             status.textContent = "ZXing kunde inte laddas. Kontrollera internetanslutningen.";
@@ -1514,6 +1515,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (controls && !scannerControls) scannerControls = controls;
                 if (result) useScannedValue(result.getText());
             });
+            ocrTimer = setInterval(() => {
+                if (document.getElementById("scannerOverlay") && !ocrReading) readInventoryText();
+            }, 1800);
         } catch (error) {
             console.error("ZXing/kamerafel:", error);
             status.textContent = error?.name === "NotAllowedError"

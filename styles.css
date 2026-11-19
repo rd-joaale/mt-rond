@@ -1160,3 +1160,5 @@ body {
 .scanner-ocr-button:hover{background:#0b4d63}.scanner-ocr-button:disabled{cursor:wait;opacity:.58}
 .scanner-cancel-button{border:1px solid #d6e0e5;background:#fff;color:#17232b}
 @media(max-width:600px){.scanner-overlay{padding:0;align-items:end}.scanner-dialog{max-height:94vh;border-radius:24px 24px 0 0}.scanner-header{padding:18px 18px 14px}.scanner-header h2{font-size:24px}.scanner-camera-shell{margin:0 14px}.scanner-status-row{margin:13px 14px 0}.scanner-actions{grid-template-columns:1fr;padding:12px 14px 16px}.scanner-cancel-button{order:2}.scanner-target{left:7%;right:7%;top:31%;height:38%}}
+
+.scanner-actions{grid-template-columns:1fr}.scanner-cancel-button{width:100%}
