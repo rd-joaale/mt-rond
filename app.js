@@ -1365,6 +1365,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let ocrWorker = null;
     let ocrReading = false;
     let ocrTimer = null;
+    let ocrCandidate = "";
+    let ocrCandidateCount = 0;
+    const OCR_CONFIRMATIONS_REQUIRED = 3;
 
     async function stopScanner() {
         if (scannerControls) {
@@ -1375,6 +1378,8 @@ document.addEventListener("DOMContentLoaded", () => {
             clearInterval(ocrTimer);
             ocrTimer = null;
         }
+        ocrCandidate = "";
+        ocrCandidateCount = 0;
         document.getElementById("scannerOverlay")?.remove();
     }
 
@@ -1385,10 +1390,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function findInventoryId(value) {
         const cleaned = normalizeInventoryValue(value);
         if (!cleaned) return "";
-        const exact = data.find((item) => normalizeInventoryValue(item.id) === cleaned);
-        if (exact) return exact.id;
-        const embedded = data.find((item) => cleaned.includes(normalizeInventoryValue(item.id)));
-        return embedded?.id || cleaned.match(/MT\d{5,8}|\d{4,8}/)?.[0] || "";
+        const match = cleaned.match(/^(?:MT\d{5,8}|\d{4,8})$/);
+        return match ? match[0] : "";
     }
 
     function useScannedValue(rawValue) {
@@ -1448,10 +1451,22 @@ document.addEventListener("DOMContentLoaded", () => {
             const text = result.data.text || "";
             const id = findInventoryId(text);
             if (id) {
-                useScannedValue(id);
+                if (id === ocrCandidate) {
+                    ocrCandidateCount += 1;
+                } else {
+                    ocrCandidate = id;
+                    ocrCandidateCount = 1;
+                }
+                if (ocrCandidateCount >= OCR_CONFIRMATIONS_REQUIRED) {
+                    useScannedValue(id);
+                    return;
+                }
+                status.textContent = `Läser ${id} – verifierar ${ocrCandidateCount}/${OCR_CONFIRMATIONS_REQUIRED}…`;
                 return;
             }
-            status.textContent = "Kunde inte läsa numret. Håll etiketten nära och centrerad och försök igen.";
+            ocrCandidate = "";
+            ocrCandidateCount = 0;
+            status.textContent = "Kunde inte läsa stabilt ännu. Håll etiketten nära och centrerad.";
         } catch (error) {
             console.error("OCR-fel:", error);
             status.textContent = "Kunde inte läsa inventarienumret. Försök igen.";
