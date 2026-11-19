@@ -1367,7 +1367,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let ocrTimer = null;
     let ocrCandidate = "";
     let ocrCandidateCount = 0;
-    const OCR_CONFIRMATIONS_REQUIRED = 3;
+    const OCR_CONFIRMATIONS_REQUIRED = 2;
 
     async function stopScanner() {
         if (scannerControls) {
@@ -1424,10 +1424,21 @@ document.addEventListener("DOMContentLoaded", () => {
             const canvas = document.createElement("canvas");
             const vw = video.videoWidth;
             const vh = video.videoHeight;
-            const cropW = Math.round(vw * 0.80);
-            const cropH = Math.round(vh * 0.34);
-            const sx = Math.round((vw - cropW) / 2);
-            const sy = Math.round((vh - cropH) / 2);
+            const shell = video.getBoundingClientRect();
+            const scale = Math.max(shell.width / vw, shell.height / vh);
+            const displayedVideoW = vw * scale;
+            const displayedVideoH = vh * scale;
+            const offsetX = (displayedVideoW - shell.width) / 2;
+            const offsetY = (displayedVideoH - shell.height) / 2;
+            const mobile = window.matchMedia("(max-width: 600px)").matches;
+            const leftRatio = mobile ? 0.07 : 0.10;
+            const topRatio = mobile ? 0.31 : 0.33;
+            const widthRatio = mobile ? 0.86 : 0.80;
+            const heightRatio = mobile ? 0.38 : 0.34;
+            const sx = Math.max(0, Math.round((shell.width * leftRatio + offsetX) / scale));
+            const sy = Math.max(0, Math.round((shell.height * topRatio + offsetY) / scale));
+            const cropW = Math.min(vw - sx, Math.round((shell.width * widthRatio) / scale));
+            const cropH = Math.min(vh - sy, Math.round((shell.height * heightRatio) / scale));
             canvas.width = cropW;
             canvas.height = cropH;
             const ctx = canvas.getContext("2d", { willReadFrequently: true });
