@@ -1362,8 +1362,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     let scannerControls = null;
+    let ocrWorker = null;
 
-    function stopScanner() {
+    async function stopScanner() {
         if (scannerControls) {
             scannerControls.stop();
             scannerControls = null;
@@ -1371,8 +1372,21 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("scannerOverlay")?.remove();
     }
 
+    function normalizeInventoryValue(value) {
+        return String(value || "").toUpperCase().replace(/\s+/g, "").trim();
+    }
+
+    function findInventoryId(value) {
+        const cleaned = normalizeInventoryValue(value);
+        if (!cleaned) return "";
+        const exact = data.find((item) => normalizeInventoryValue(item.id) === cleaned);
+        if (exact) return exact.id;
+        const embedded = data.find((item) => cleaned.includes(normalizeInventoryValue(item.id)));
+        return embedded?.id || cleaned.match(/MT\d{5,8}|\d{4,8}/)?.[0] || "";
+    }
+
     function useScannedValue(rawValue) {
-        const scannedValue = String(rawValue || "").trim();
+        const scannedValue = findInventoryId(rawValue);
         if (!scannedValue) return false;
         $("#searchInput").value = scannedValue;
         page = 0;
@@ -1383,36 +1397,110 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     }
 
+    async function readInventoryText() {
+        const status = document.getElementById("scannerStatus");
+        const button = document.getElementById("ocrScanBtn");
+        const video = document.getElementById("scannerVideo");
+        if (!window.Tesseract) {
+            status.textContent = "Textläsningen kunde inte laddas.";
+            return;
+        }
+        if (!video || video.readyState < 2) {
+            status.textContent = "Kameran är inte redo ännu.";
+            return;
+        }
+        button.disabled = true;
+        status.textContent = "Läser inventarienummer…";
+        try {
+            const canvas = document.createElement("canvas");
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            const cropW = Math.round(vw * 0.80);
+            const cropH = Math.round(vh * 0.34);
+            const sx = Math.round((vw - cropW) / 2);
+            const sy = Math.round((vh - cropH) / 2);
+            canvas.width = cropW;
+            canvas.height = cropH;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+            const image = ctx.getImageData(0, 0, cropW, cropH);
+            const d = image.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                const level = gray > 150 ? 255 : 0;
+                d[i] = d[i + 1] = d[i + 2] = level;
+            }
+            ctx.putImageData(image, 0, 0);
+            if (!ocrWorker) {
+                ocrWorker = await Tesseract.createWorker("eng");
+                await ocrWorker.setParameters({
+                    tessedit_char_whitelist: "MT0123456789 ",
+                    preserve_interword_spaces: "1"
+                });
+            }
+            const result = await ocrWorker.recognize(canvas);
+            const text = result.data.text || "";
+            const id = findInventoryId(text);
+            if (id) {
+                useScannedValue(id);
+                return;
+            }
+            status.textContent = "Kunde inte läsa numret. Håll etiketten nära och centrerad och försök igen.";
+        } catch (error) {
+            console.error("OCR-fel:", error);
+            status.textContent = "Kunde inte läsa inventarienumret. Försök igen.";
+        } finally {
+            const currentButton = document.getElementById("ocrScanBtn");
+            if (currentButton) currentButton.disabled = false;
+        }
+    }
+
     async function startScanner() {
         if (document.getElementById("scannerOverlay")) return;
-
         const overlay = document.createElement("div");
         overlay.id = "scannerOverlay";
-        overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(16,34,53,.78);display:grid;place-items:center;padding:16px";
+        overlay.className = "scanner-overlay";
         overlay.innerHTML = `
-            <section role="dialog" aria-modal="true" aria-labelledby="scannerTitle" style="width:min(620px,100%);max-height:calc(100vh - 32px);overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 24px 70px rgba(0,0,0,.35)">
-                <div style="display:flex;justify-content:space-between;gap:16px;align-items:start">
-                    <div><h2 id="scannerTitle" style="margin:0">Skanna inventarie</h2><p style="margin:5px 0 16px">Rikta kameran mot koden. Träffen visas i den befintliga listan.</p></div>
-                    <button type="button" id="scannerClose" aria-label="Stäng" style="font-size:24px;border:0;background:transparent;cursor:pointer">×</button>
+            <section class="scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="scannerTitle">
+                <header class="scanner-header">
+                    <div>
+                        <span class="scanner-kicker">MT ROND</span>
+                        <h2 id="scannerTitle">Skanna inventarie</h2>
+                        <p>Kod läses automatiskt. För äldre etiketter, placera numret i ramen och välj Läs inventarienummer.</p>
+                    </div>
+                    <button type="button" class="scanner-close" id="scannerClose" aria-label="Stäng">×</button>
+                </header>
+                <div class="scanner-camera-shell">
+                    <video id="scannerVideo" autoplay playsinline muted></video>
+                    <div class="scanner-shade"></div>
+                    <div class="scanner-target" aria-hidden="true">
+                        <span class="scanner-corner tl"></span><span class="scanner-corner tr"></span>
+                        <span class="scanner-corner bl"></span><span class="scanner-corner br"></span>
+                    </div>
+                    <div class="scanner-camera-label">Placera kod eller inventarienummer här</div>
                 </div>
-                <div style="position:relative;aspect-ratio:4/3;overflow:hidden;border-radius:12px;background:#102235">
-                    <video id="scannerVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
-                    <div style="position:absolute;inset:25% 10%;border:3px solid #fff;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.22);pointer-events:none"></div>
+                <div class="scanner-status-row">
+                    <span class="scanner-status-dot" aria-hidden="true"></span>
+                    <p id="scannerStatus" aria-live="polite">Startar kameran…</p>
                 </div>
-                <p id="scannerStatus" aria-live="polite" style="min-height:24px;font-weight:700">Startar kameran…</p>
+                <div class="scanner-actions">
+                    <button type="button" class="scanner-ocr-button" id="ocrScanBtn">
+                        <span aria-hidden="true">⌕</span> Läs inventarienummer
+                    </button>
+                    <button type="button" class="scanner-cancel-button" id="scannerCancel">Avbryt</button>
+                </div>
             </section>`;
         document.body.appendChild(overlay);
-
         const status = document.getElementById("scannerStatus");
         const video = document.getElementById("scannerVideo");
         document.getElementById("scannerClose").addEventListener("click", stopScanner);
+        document.getElementById("scannerCancel").addEventListener("click", stopScanner);
+        document.getElementById("ocrScanBtn").addEventListener("click", readInventoryText);
         overlay.addEventListener("click", (event) => { if (event.target === overlay) stopScanner(); });
-
         if (!window.ZXingBrowser) {
-            status.textContent = "ZXing kunde inte laddas. Kontrollera internetanslutningen och ladda om sidan.";
+            status.textContent = "ZXing kunde inte laddas. Kontrollera internetanslutningen.";
             return;
         }
-
         try {
             const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
             if (!devices.length) {
@@ -1421,7 +1509,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             const selectedDevice = devices[devices.length - 1];
             const reader = new ZXingBrowser.BrowserMultiFormatReader();
-            status.textContent = "Söker efter kod…";
+            status.textContent = "Kameran är redo – söker efter kod";
             scannerControls = await reader.decodeFromVideoDevice(selectedDevice.deviceId, video, (result, error, controls) => {
                 if (controls && !scannerControls) scannerControls = controls;
                 if (result) useScannedValue(result.getText());
@@ -1429,7 +1517,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (error) {
             console.error("ZXing/kamerafel:", error);
             status.textContent = error?.name === "NotAllowedError"
-                ? "Kameraåtkomst nekades. Tillåt kameran i Edge och försök igen."
+                ? "Kameraåtkomst nekades. Tillåt kameran och försök igen."
                 : "Kameran kunde inte starta.";
         }
     }
