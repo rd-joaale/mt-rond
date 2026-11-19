@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MT Rond</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="round-app">
+        <main>
+            <header class="app-header">
+                <div class="header-left">
+                    <div class="title-and-tabs">
+                        <h1>Rondlista</h1>
+                        <div class="view-tabs" role="tablist" aria-label="Välj rondvy">
+                            <button type="button" class="view-tab active" data-view="todo" role="tab" aria-selected="true">
+                                Att bearbeta
+                                <span class="tab-count" id="todoBadge">0</span>
+                            </button>
+                            <button type="button" class="view-tab" data-view="done" role="tab" aria-selected="false">
+                                Bearbetade
+                                <span class="tab-count" id="doneTabBadge">0</span>
+                            </button>
+                        </div>
+                        <div class="header-search-tools">
+                            <div class="search">
+                                <span class="search-icon" aria-hidden="true">⌕</span>
+                                <input type="search" id="searchInput" aria-label="Sök inventarie-id" placeholder="Sök inventarie-id" autocomplete="off">
+                            </div>
+                            <button type="button" class="tool-button" id="voiceBtn" aria-label="Röstsökning" title="Röstsökning">
+                                <span aria-hidden="true">🎙</span>
+                            </button>
+                            <button type="button" class="tool-button" id="scanBtn" aria-label="Skanna kod" title="Skanna kod">
+                                <span aria-hidden="true">▣</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="sub" id="viewDescription">Välj en rad för att registrera kontrollen</p>
+                </div>
+
+                <div class="header-actions">
+                    <div class="progress-card" aria-label="Genomförandestatus">
+                        <div class="progress-content">
+                            <span class="progress-label">Genomfört</span>
+                            <strong id="progressText">0 av 0</strong>
+                        </div>
+                        <div class="track" aria-hidden="true">
+                            <div class="fill" id="progressFill"></div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="settings-button" id="settingsBtn" data-view="settings" aria-label="Öppna inställningar" title="Inställningar">
+                        <span aria-hidden="true">⚙</span>
+                    </button>
+                </div>
+            </header>
+
+            <section class="view active" id="view-todo">
+                <div class="table-card">
+                    <div class="thead" id="todoHead"></div>
+                    <div id="todoRows"></div>
+                </div>
+
+                <div class="pager">
+                    <div class="pager-left">
+                        <span id="todoInfo"></span>
+                        <button type="button" class="primary report-complete-btn" id="completeReportTodo" hidden>Klarmarkera rapport</button>
+                    </div>
+                    <div class="pager-buttons">
+                        <button type="button" class="secondary" id="prevBtn">‹ Föregående</button>
+                        <strong id="pageText"></strong>
+                        <button type="button" class="primary" id="nextBtn">Nästa ›</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" id="view-done">
+                <div class="section-heading">
+                    <div>
+                        <h2>Bearbetade rader</h2>
+                        <p>Kontroller som har markerats som klara</p>
+                    </div>
+                    <div class="done-heading-actions">
+                        <span class="badge" id="doneBadge">0 klara</span>
+                        <button type="button" class="primary report-complete-btn" id="completeReportDone" hidden>Klarmarkera rapport</button>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <div class="thead" id="doneHead"></div>
+                    <div id="doneRows"></div>
+                </div>
+            </section>
+
+            <section class="view" id="view-settings">
+                <div class="settings-heading">
+                    <div>
+                        <h2>Inställningar</h2>
+                        <p>Anpassa rondvyn och formulärets verktygslista</p>
+                    </div>
+                    <button type="button" class="secondary" id="backFromSettings">Tillbaka till rondlistan</button>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h3>Kolumnordning</h3>
+                        <p>Flytta kolumnerna med pilarna. Ändringen visas direkt i listan.</p>
+                        <div class="column-list" id="columnList"></div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>Mina verktyg</h3>
+                        <p>Endast markerade verktyg visas när en kontroll registreras.</p>
+                        <div class="tool-grid" id="toolGrid"></div>
+                        <button type="button" class="primary save-settings" id="saveSettings">Spara inställningar</button>
+                        <div class="saved" id="savedMessage" aria-live="polite"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div class="overlay" id="overlay">
+            <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+                <div class="modal-head">
+                    <div>
+                        <h2 id="modalTitle">Registrera kontroll</h2>
+                        <p id="modalId"></p>
+                    </div>
+                    <button type="button" class="close" id="closeModal" aria-label="Stäng">×</button>
+                </div>
+                <form id="itemForm">
+                    <div class="form">
+                        <div class="summary" id="itemSummary"></div>
+                        <div class="checks">
+                            <label class="check-card"><input type="checkbox" id="needsAction"><span>Behöver åtgärd</span></label>
+                            <label class="check-card"><input type="checkbox" id="isDone"><span>Klar</span></label>
+                        </div>
+                        <label class="field comment-field"><span>Anmärkning</span><textarea id="comment" placeholder="Skriv en kort anmärkning..."></textarea></label>
+                        <div class="equipment-field">
+                            <div class="field-heading">Testutrustning</div>
+                            <div class="multi" id="equipmentOptions"></div>
+                        </div>
+                        <label class="field condition-field">
+                            <span>Kondition</span>
+                            <select id="condition">
+                                <option value="1">1 – Dålig</option>
+                                <option value="2">2 – Godkänd</option>
+                                <option value="3" selected>3 – Bra</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="actions">
+                        <button type="button" class="secondary" id="cancelModal">Avbryt</button>
+                        <button type="submit" class="primary">Spara kontroll</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="toast" id="toast" aria-live="polite"></div>
+    </div>
+    <script src="https://unpkg.com/@zxing/browser@0.2.1"></script>
+    <script src="app.js"></script>
+</body>
+</html>
