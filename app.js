@@ -1365,9 +1365,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let ocrWorker = null;
     let ocrReading = false;
     let ocrTimer = null;
-    let ocrCandidate = "";
-    let ocrCandidateCount = 0;
-    const OCR_CONFIRMATIONS_REQUIRED = 2;
 
     async function stopScanner() {
         if (scannerControls) {
@@ -1378,8 +1375,6 @@ document.addEventListener("DOMContentLoaded", () => {
             clearInterval(ocrTimer);
             ocrTimer = null;
         }
-        ocrCandidate = "";
-        ocrCandidateCount = 0;
         document.getElementById("scannerOverlay")?.remove();
     }
 
@@ -1390,8 +1385,10 @@ document.addEventListener("DOMContentLoaded", () => {
     function findInventoryId(value) {
         const cleaned = normalizeInventoryValue(value);
         if (!cleaned) return "";
-        const match = cleaned.match(/^(?:MT\d{5,8}|\d{4,8})$/);
-        return match ? match[0] : "";
+        const exact = data.find((item) => normalizeInventoryValue(item.id) === cleaned);
+        if (exact) return exact.id;
+        const embedded = data.find((item) => cleaned.includes(normalizeInventoryValue(item.id)));
+        return embedded?.id || cleaned.match(/MT\d{5,8}|\d{4,8}/)?.[0] || "";
     }
 
     function useScannedValue(rawValue) {
@@ -1424,21 +1421,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const canvas = document.createElement("canvas");
             const vw = video.videoWidth;
             const vh = video.videoHeight;
-            const shell = video.getBoundingClientRect();
-            const scale = Math.max(shell.width / vw, shell.height / vh);
-            const displayedVideoW = vw * scale;
-            const displayedVideoH = vh * scale;
-            const offsetX = (displayedVideoW - shell.width) / 2;
-            const offsetY = (displayedVideoH - shell.height) / 2;
-            const mobile = window.matchMedia("(max-width: 600px)").matches;
-            const leftRatio = mobile ? 0.07 : 0.10;
-            const topRatio = mobile ? 0.31 : 0.33;
-            const widthRatio = mobile ? 0.86 : 0.80;
-            const heightRatio = mobile ? 0.38 : 0.34;
-            const sx = Math.max(0, Math.round((shell.width * leftRatio + offsetX) / scale));
-            const sy = Math.max(0, Math.round((shell.height * topRatio + offsetY) / scale));
-            const cropW = Math.min(vw - sx, Math.round((shell.width * widthRatio) / scale));
-            const cropH = Math.min(vh - sy, Math.round((shell.height * heightRatio) / scale));
+            const cropW = Math.round(vw * 0.80);
+            const cropH = Math.round(vh * 0.34);
+            const sx = Math.round((vw - cropW) / 2);
+            const sy = Math.round((vh - cropH) / 2);
             canvas.width = cropW;
             canvas.height = cropH;
             const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -1462,22 +1448,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const text = result.data.text || "";
             const id = findInventoryId(text);
             if (id) {
-                if (id === ocrCandidate) {
-                    ocrCandidateCount += 1;
-                } else {
-                    ocrCandidate = id;
-                    ocrCandidateCount = 1;
-                }
-                if (ocrCandidateCount >= OCR_CONFIRMATIONS_REQUIRED) {
-                    useScannedValue(id);
-                    return;
-                }
-                status.textContent = `Läser ${id} – verifierar ${ocrCandidateCount}/${OCR_CONFIRMATIONS_REQUIRED}…`;
+                useScannedValue(id);
                 return;
             }
-            ocrCandidate = "";
-            ocrCandidateCount = 0;
-            status.textContent = "Kunde inte läsa stabilt ännu. Håll etiketten nära och centrerad.";
+            status.textContent = "Kunde inte läsa numret. Håll etiketten nära och centrerad och försök igen.";
         } catch (error) {
             console.error("OCR-fel:", error);
             status.textContent = "Kunde inte läsa inventarienumret. Försök igen.";
